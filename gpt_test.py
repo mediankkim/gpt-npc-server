@@ -1,14 +1,16 @@
+
 import os
+import json
+import redis
 from openai import OpenAI
 from dotenv import load_dotenv
 
 load_dotenv()
 client = OpenAI(api_key=os.getenv("OPENAI_API_KEY"))
 
-# 초기 히스토리
-# 🧠 캐릭터 설정 (system 프롬프트)
-messages = [
-    {
+redis_client = redis.Redis(host="localhost", port=6379, db=0, decode_responses=True)
+
+CHARACTER_SYSTEM_PROMPT = {
         "role": "system",
         "content": """
 넌 지금부터 다음과 같은 인물처럼 행동해야 해.
@@ -29,13 +31,26 @@ messages = [
 반말을 사용하고, 유머러스하게 대답해.
 대마초에 대한 이야기는 대마초 = 커피 라는 은어가 있으니 그걸로 대답해.
         """.strip()
-    }
-]
+}
 
-MAX_HISTORY = 10  # 이 이상 길어지면 요약 (user+assistant 쌍 기준)
+MAX_HISTORY = 10
+TTL_SECONDS = 3600  # 1시간 후 자동 삭제
+
+# --- 실행 시 한 번만 UID 입력 ---
+uid = input("🆔 유저 ID 입력 (처음 한 번): ").strip()
+redis_key = f"chat:{uid}"
+
+def get_user_messages():
+    raw = redis_client.get(redis_key)
+    if raw:
+        return json.loads(raw)
+    else:
+        return [CHARACTER_SYSTEM_PROMPT]
+
+def save_user_messages(messages):
+    redis_client.set(redis_key, json.dumps(messages), ex=TTL_SECONDS)
 
 def summarize_conversation(history):
-    """GPT에게 대화 요약 요청"""
     summary_prompt = [
         {"role": "system", "content": "다음은 유저와 NPC의 대화야. 이 내용을 요약해줘."}
     ] + history
@@ -44,18 +59,19 @@ def summarize_conversation(history):
         model="gpt-3.5-turbo",
         messages=summary_prompt
     )
-
     return response.choices[0].message.content.strip()
 
-print("💬 NPC와 대화를 시작하세요. 'exit' 입력 시 종료됩니다.\n")
+
+print(f"💬 '{uid}'의 대화가 시작됩니다. 'exit' 입력 시 종료.\n")
 
 while True:
-    user_input = input("👤 You: ")
+    user_input = input("👤 You: ").strip()
     if user_input.lower() in ["exit", "quit"]:
         print("👋 대화를 종료합니다.")
         break
 
-    # 대화 추가
+    # 메시지 불러오기 & 추가
+    messages = get_user_messages()
     messages.append({"role": "user", "content": user_input})
 
     # GPT 응답
@@ -66,19 +82,18 @@ while True:
     reply = response.choices[0].message.content.strip()
     print("🤖 종석햄:", reply)
 
-    # 응답 저장
     messages.append({"role": "assistant", "content": reply})
 
-    # 👉 요약 조건 체크: user + assistant 메시지가 MAX_HISTORY 쌍을 넘으면 요약
-    conversation_only = [m for m in messages if m["role"] in ["user", "assistant"]]
-    if len(conversation_only) >= MAX_HISTORY * 2:
-        print("\n🧠 대화가 길어져서 요약 중...\n")
-        summary = summarize_conversation(conversation_only)
-        print("📄 요약:", summary)
-
-        # 새로운 system 메시지로 교체 + 마지막 유저 메시지만 남기기
+    # 길이 초과 시 요약
+    user_and_assistant = [m for m in messages if m["role"] in ["user", "assistant"]]
+    if len(user_and_assistant) >= MAX_HISTORY * 2:
+        print("🧠 대화가 길어져서 요약 중...\n")
+        summary = summarize_conversation(user_and_assistant)
         messages = [
             {"role": "system", "content": f"이전 대화 요약: {summary}"},
-            messages[-2],  # 마지막 user
-            messages[-1]   # 마지막 assistant
+            messages[-2],
+            messages[-1]
         ]
+
+    # 저장 + TTL 부여
+    save_user_messages(messages)
