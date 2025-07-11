@@ -21,7 +21,7 @@ Redis를 활용해 사용자별 대화 상태를 기억하며, OpenAI GPT 모델
 
 ```bash
 python3 -m venv venv
-source venv/bin/activate  # Windows: venv\Scripts\activate
+source venv/bin/activate  # Windows: venv\Scripts\activate.ps1(powershell)
 pip install -r requirements.txt
 ```
 
