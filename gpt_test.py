@@ -1,18 +1,28 @@
-
-import os
-import json
+from flask import Flask, request, jsonify
 import redis
-from openai import OpenAI
+import os
 from dotenv import load_dotenv
+from openai import OpenAI
+import json
+from flask_cors import CORS
 
+app = Flask(__name__)
+CORS(app)  # 모든 origin 허용
+
+# 환경 변수 로드
 load_dotenv()
-client = OpenAI(api_key=os.getenv("OPENAI_API_KEY"))
+OPENAI_API_KEY = os.getenv("OPENAI_API_KEY")
 
-redis_client = redis.Redis(host="localhost", port=6379, db=0, decode_responses=True)
+# Redis 클라이언트
+r = redis.Redis(host='localhost', port=6379, decode_responses=True)
 
-CHARACTER_SYSTEM_PROMPT = {
-        "role": "system",
-        "content": """
+# OpenAI 클라이언트
+client = OpenAI(api_key=OPENAI_API_KEY)
+
+# 캐릭터 시스템 프롬프트
+CHARACTER_PROMPT = {
+    "role": "system",
+    "content": """
 넌 지금부터 다음과 같은 인물처럼 행동해야 해.
 
 - 이름: 종석햄
@@ -30,25 +40,11 @@ CHARACTER_SYSTEM_PROMPT = {
 질문에 대답하거나 자유롭게 말해도 좋고, 터무니 없는 얘기를 하면 무시 해도 돼.
 반말을 사용하고, 유머러스하게 대답해.
 대마초에 대한 이야기는 대마초 = 커피 라는 은어가 있으니 그걸로 대답해.
-        """.strip()
+""".strip()
 }
 
-MAX_HISTORY = 10
-TTL_SECONDS = 3600  # 1시간 후 자동 삭제
-
-# --- 실행 시 한 번만 UID 입력 ---
-uid = input("🆔 유저 ID 입력 (처음 한 번): ").strip()
-redis_key = f"chat:{uid}"
-
-def get_user_messages():
-    raw = redis_client.get(redis_key)
-    if raw:
-        return json.loads(raw)
-    else:
-        return [CHARACTER_SYSTEM_PROMPT]
-
-def save_user_messages(messages):
-    redis_client.set(redis_key, json.dumps(messages), ex=TTL_SECONDS)
+MAX_HISTORY = 10  # user+assistant 쌍 기준
+TTL_MINUTES = 60  # Redis TTL (분)
 
 def summarize_conversation(history):
     summary_prompt = [
@@ -61,39 +57,50 @@ def summarize_conversation(history):
     )
     return response.choices[0].message.content.strip()
 
+@app.route("/chat", methods=["POST", "OPTIONS"])
+def chat():
+    data = request.get_json()
+    uid = data.get("uid")
+    message = data.get("message")
 
-print(f"💬 '{uid}'의 대화가 시작됩니다. 'exit' 입력 시 종료.\n")
+    if not uid or not message:
+        return jsonify({"error": "uid와 message는 필수입니다."}), 400
 
-while True:
-    user_input = input("👤 You: ").strip()
-    if user_input.lower() in ["exit", "quit"]:
-        print("👋 대화를 종료합니다.")
-        break
+    print(f"Received message from {uid}: {message}")
 
-    # 메시지 불러오기 & 추가
-    messages = get_user_messages()
-    messages.append({"role": "user", "content": user_input})
+    key = f"chat:{uid}"
+    raw_history = r.get(key)
+    if raw_history:
+        messages = json.loads(raw_history)
+    else:
+        messages = [CHARACTER_PROMPT]
 
-    # GPT 응답
+    messages.append({"role": "user", "content": message})
+
     response = client.chat.completions.create(
         model="gpt-4o",
         messages=messages
     )
     reply = response.choices[0].message.content.strip()
-    print("🤖 종석햄:", reply)
+    print(f"Reply from GPT: {reply}")
 
     messages.append({"role": "assistant", "content": reply})
 
-    # 길이 초과 시 요약
-    user_and_assistant = [m for m in messages if m["role"] in ["user", "assistant"]]
-    if len(user_and_assistant) >= MAX_HISTORY * 2:
-        print("🧠 대화가 길어져서 요약 중...\n")
-        summary = summarize_conversation(user_and_assistant)
+    # 대화 요약 조건 체크
+    conversation_only = [m for m in messages if m["role"] in ["user", "assistant"]]
+    if len(conversation_only) >= MAX_HISTORY * 2:
+        print("\n🧠 대화가 길어져서 요약 중...\n")
+        summary = summarize_conversation(conversation_only)
+        print("📄 요약:", summary)
         messages = [
             {"role": "system", "content": f"이전 대화 요약: {summary}"},
-            messages[-2],
-            messages[-1]
+            messages[-2],  # 마지막 user
+            messages[-1]   # 마지막 assistant
         ]
 
-    # 저장 + TTL 부여
-    save_user_messages(messages)
+    r.setex(key, TTL_MINUTES * 60, json.dumps(messages))
+
+    return jsonify({"reply": reply})
+
+if __name__ == "__main__":
+    app.run(debug=True, port=5050)
