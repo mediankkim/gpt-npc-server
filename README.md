@@ -1,128 +1,117 @@
-# 🧠 GPT NPC Server (with Redis & Flask)
+# GPT-NPC Server (FastAPI + ChromaDB)
 
-AI 캐릭터 '종석햄'과 자연스럽게 대화할 수 있는 NPC 서버 프로젝트입니다.  
-Redis를 활용해 사용자별 대화 상태를 기억하며, OpenAI GPT 모델을 활용하여 개성 있는 반응을 제공합니다.
-
----
-
-## 🧩 주요 기능
-
-- 💬 **캐릭터 설정**: system 프롬프트로 독특한 NPC 성격 부여 (ex. 종석햄)
-- 🧠 **대화 히스토리 기억**: Redis를 활용한 사용자별 상태 관리 (UID 기반)
-- ✂️ **요약 기능**: 대화가 길어지면 GPT가 자동 요약 → 프롬프트 리셋
-- 🔁 **Flask API 제공**: `/chat` 엔드포인트로 POST 요청을 통해 대화 수행
-- 🌐 **CORS 지원**: 다양한 클라이언트 환경에서 호출 가능
+캐릭터 성격을 부여한 AI NPC와의 자연스러운 대화를 지원하는 서버입니다.
+OpenAI GPT-4o, FastAPI, ChromaDB를 기반으로 구현되었습니다.
 
 ---
 
-## 🔧 설치 방법
+## ⚙️ 기술 스택
 
-### 1. Python & 의존성 설치
+- **FastAPI**: 비동기 Python 웹 프레임워크
+- **OpenAI GPT-4o**: AI 응답 생성
+- **ChromaDB**: 유저별 대화 내용 임벤딩 벡터 저장
+- **uuid4**: 각 메시지의 고유 ID
+- **python-dotenv**: 환경 변수 로드
+
+---
+
+## 💻 로컬 실행 방법
+
+### ✅ 1. 가상환경 만들기
+
+**Mac/Linux:**
 
 ```bash
-python3 -m venv venv
-source venv/bin/activate  # Windows: venv\Scripts\activate.ps1(powershell)
+python3 -m venv .venv
+source .venv/bin/activate
+```
+
+**Windows PowerShell:**
+
+```powershell
+python -m venv .venv
+.venv\Scripts\Activate.ps1
+```
+
+> _PowerShell 실행 경찰 오류가 날 경우:_
+> 관리자 권한 PowerShell에서 다음 실행
+>
+> ```powershell
+> Set-ExecutionPolicy -ExecutionPolicy RemoteSigned -Scope CurrentUser
+> ```
+
+---
+
+### ✅ 2. 의존성 설치
+
+```bash
 pip install -r requirements.txt
 ```
 
-### 2. `.env` 파일 생성
+---
+
+### ✅ 3. `.env` 설정
+
+`.env` 파일 생성 후 다음 입력
 
 ```
-OPENAI_API_KEY=your_openai_api_key_here
+OPENAI_API_KEY=sk-xxxxxxx
 ```
 
-### 3. Redis 설치 및 실행
+---
 
-#### ✅ macOS
+### ✅ 4. 서버 실행
 
 ```bash
-brew install redis
-brew services start redis
+uvicorn main:app --reload
 ```
 
-#### ✅ Windows
-
-1. [https://github.com/tporadowski/redis/releases](https://github.com/tporadowski/redis/releases) 에서 최신 Windows용 Redis 다운로드
-2. 압축 해제 후 `redis-server.exe` 실행 (CLI 또는 PowerShell에서 가능)
-3. `redis-cli.exe` 를 통해 접속 가능 (옵션)
-
-※ 권장 경로: `C:\redis`
-
-```cmd
-cd C:\redis
-redis-server.exe
-```
+실행 후 [http://localhost:8000](http://localhost:8000) 로 접속 가능
 
 ---
 
-## 🚀 실행 방법
-
-```bash
-python your_flask_file.py
-```
-
-기본적으로 `localhost:5050`에서 Flask 서버가 실행됩니다.
-
----
-
-## 📡 API 사용 예시
-
-### ▶️ POST `/chat`
-
-**Request Body (JSON):**
-
-```json
-{
-  "uid": "user123",
-  "message": "안녕? 뭐하고 있어?"
-}
-```
-
-**Response (JSON):**
-
-```json
-{
-  "reply": "요~ 잘 있었냐? 요즘 커피 좀 줄이려고 했는데 또 마셨어ㅋㅋ"
-}
-```
-
----
-
-## 📦 기술 스택
-
-- Python 3.9+
-- Flask
-- Redis
-- OpenAI GPT (gpt-4o / gpt-3.5-turbo)
-- python-dotenv
-- flask-cors
-
----
-
-## 📁 폴더 구조 예시
+## 📁 주요 구조
 
 ```
 gpt-npc-server/
-├── .env
-├── .gitignore
-├── requirements.txt
-├── app.py (혹은 main.py)
-├── README.md
+├─ chroma/              # ChromaDB 클라이언트 구성
+│   └─ client.py
+├─ npcs/                # NPC별 라우터
+│   └─ eren.py
+├─ chroma_db/           # Chroma 저장소 (자동 생성됨)
+├─ main.py
+├─ requirements.txt
+└─ .env
 ```
 
 ---
 
-## 📌 향후 개발 방향
+## 🧠 주요 기능
 
-- Unity / VRChat 연동
-- 캐릭터별 프리셋 관리
-- 다국어 / 번역 지원
-- 로그 분석 및 감정 상태 추론
-- Redis 아닌 DB 전환 고려 (ex. MongoDB, PostgreSQL)
+- NPC 이름별로 `/npc/{npc_name}/chat` REST API 제공
+- 각 유저 UID별로 Chroma 콜렉션 생성
+- 대화는 UUID로 저장, 벡터 임벤딩 처리
+- 가장 유사한 과거 메시지 3개를 보기로 추적
+- GPT 응답 생성 후 반환
 
 ---
 
-## 🙏 Special Thanks
+## 📌 예시 요청
 
-이 프로젝트는 GPT를 활용한 인터랙티브 게임 제작 학습을 목적으로 제작되었습니다.  
-피드백 및 아이디어 환영합니다!
+```
+POST /npc/eren/chat
+Content-Type: application/json
+
+{
+  "uid": "user_123",
+  "message": "이것는 네 자유의지약이야?"
+}
+```
+
+---
+
+## 📝 참고 사항
+
+- `chroma_db` 폴더는 프로젝트 루트에 자동 생성되며 벡터 데이터가 저장됩니다.
+- huggingface tokenizers 경고는 무시해도 되는 내용입니다.
+- GPT context window는 요약 기능 등으로 관리 가능 (최근 복사중)
