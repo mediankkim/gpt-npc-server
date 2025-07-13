@@ -46,6 +46,7 @@ async def chat_eren(req: ChatRequest):
     )
 
     related = results.get("documents", [[]])[0]
+
     context_messages = [
         SYSTEM_PROMPT
     ]
@@ -75,4 +76,7 @@ async def chat_eren(req: ChatRequest):
         ids=[str(uuid.uuid4())]
     )
 
-    return {"reply": reply}
+    return {
+        "reply": reply,
+        "related": related
+        }
