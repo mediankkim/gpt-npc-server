@@ -1,9 +1,10 @@
-from fastapi import APIRouter, Request
+from fastapi import APIRouter
 from pydantic import BaseModel
 from openai import OpenAI
 import os
 from dotenv import load_dotenv
 from chroma.client import get_user_collection
+from embedding.embedding_utils import get_embedding
 import uuid
 
 router = APIRouter()
@@ -39,10 +40,13 @@ async def chat_eren(req: ChatRequest):
     # 유저별 컬렉션 가져오기
     collection = get_user_collection(NPC_NAME, uid)
 
+    # 유저 메시지 임베딩
+    query_embedding = get_embedding(message)
+
     # 유사 대화 검색
     results = collection.query(
-        query_texts=[message],
-        n_results=3,    # 최근 대화 3개 임베딩 검색
+        query_embeddings=[query_embedding],
+        n_results=3
     )
 
     related = results.get("documents", [[]])[0]
@@ -64,19 +68,21 @@ async def chat_eren(req: ChatRequest):
     )
     reply = response.choices[0].message.content.strip()
 
-    # 벡터 DB에 저장
+    # ✅ GPT 응답과 유저 메시지 모두 임베딩 후 저장
     collection.add(
         documents=[message],
         metadatas=[{"role": "user"}],
+        embeddings=[get_embedding(message)],
         ids=[str(uuid.uuid4())]
     )
     collection.add(
         documents=[reply],
         metadatas=[{"role": "assistant"}],
+        embeddings=[get_embedding(reply)],
         ids=[str(uuid.uuid4())]
     )
 
     return {
         "reply": reply,
         "related": related
-        }
+    }
