@@ -73,7 +73,7 @@ async def chat_eren(req: ChatRequest):
     for text, meta in zip(documents, metadatas):
         role = meta.get("role")
         if role in ("user", "assistant") and text not in [m["content"] for m in redis_messages]:
-            context_messages.append({"role": role, "content": text})
+            context_messages.append({"role": role, "content": "(과거 발화)" + text})
 
     # 레디스 메시지 추가
     context_messages.extend(redis_messages)
