@@ -15,7 +15,8 @@ load_dotenv()
 client = OpenAI(api_key=os.getenv("OPENAI_API_KEY"))
 
 # Redis 클라이언트
-r = redis.Redis(host='localhost', port=6379, decode_responses=True)
+# r = redis.Redis(host='localhost', port=6379, decode_responses=True)
+r = redis.Redis(host="redis", port=6379, decode_responses=True)
 
 NPC_NAME = "eren"
 

@@ -1,0 +1,20 @@
+version: "3.8"
+
+services:
+  api:
+    build: .
+    container_name: gpt-npc-api
+    ports:
+      - "8000:8000"
+    volumes:
+      - .:/app
+    env_file:
+      - .env
+    depends_on:
+      - redis
+
+  redis:
+    image: redis:7
+    container_name: gpt-npc-redis
+    ports:
+      - "6379:6379"
